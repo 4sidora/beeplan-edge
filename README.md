@@ -1,6 +1,6 @@
 # beeplan-edge
 
-**Сборка платы, пины датчиков и связь с концентратором:** [HARDWARE.md](https://github.com/beeplan/beeplan-docs/blob/main/HARDWARE.md) в репозитории **beeplan-docs** (обновляйте при изменениях прошивки; замените `beeplan` на ваш org при необходимости).
+**Сборка платы, пины датчиков и связь с концентратором:** [HARDWARE.md](https://github.com/4sidora/beeplan-docs/blob/main/HARDWARE.md) в репозитории **beeplan-docs** (обновляйте при изменениях прошивки).
 
 Прошивка **BeePlan** для ESP32 в улье: опрос датчиков, короткий захват звука, вычисление компактных признаков, отправка на концентратор по **ESP‑NOW**, затем deep sleep.
 

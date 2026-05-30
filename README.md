@@ -4,10 +4,12 @@
 
 Прошивка **BeePlan** для ESP32 в улье: опрос датчиков, короткий захват звука, вычисление компактных признаков, отправка на концентратор по **ESP‑NOW**, затем deep sleep.
 
-## Сборка
+**Рекомендуемая установка:** веб-мастер в [beeplan-web](https://github.com/4sidora/beeplan-web) (`/install/edge`). Конфигурация генерируется сервисом **beeplan-builder** из `include/config.h.in`.
 
-1. Установите [PlatformIO](https://platformio.org/).
-2. Укажите в `include/config.h` MAC концентратора (`GATEWAY_MAC`) и `DEVICE_PUBLIC_ID` (совпадает с записью в API, например `dev-edge-1`).
+## Сборка (разработчикам)
+
+1. Скопируйте `include/config.h.example` → `include/config.h`.
+2. Укажите `GATEWAY_MAC` и `DEVICE_PUBLIC_ID`.
 3. `pio run -t upload`
 
 ## Протокол ESP‑NOW (черновик v1)

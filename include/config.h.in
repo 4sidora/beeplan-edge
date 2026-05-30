@@ -1,0 +1,10 @@
+#pragma once
+
+/** MAC концентратора ESP-NOW (6 байт). */
+static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
+
+/** Публичный идентификатор устройства (как в BeePlan API). */
+#define DEVICE_PUBLIC_ID "{{DEVICE_PUBLIC_ID}}"
+
+/** Интервал между циклами измерения (секунды). */
+#define WAKE_INTERVAL_SEC {{WAKE_INTERVAL_SEC}}

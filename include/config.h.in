@@ -8,3 +8,12 @@ static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
 
 /** Интервал между циклами измерения (секунды). */
 #define WAKE_INTERVAL_SEC {{WAKE_INTERVAL_SEC}}
+
+/** Wi‑Fi канал концентратора (1–13). 0 = авто-поиск при старте. */
+#define GATEWAY_WIFI_CHANNEL 0
+
+/** Semver (0.1.2). */
+#define FIRMWARE_VERSION "{{FIRMWARE_VERSION}}"
+
+/** Полное имя в Serial: beeplan-Edge-0.1.2 */
+#define FIRMWARE_SERIAL_TAG "{{FIRMWARE_SERIAL_TAG}}"

@@ -1,0 +1,49 @@
+#pragma once
+
+#include <Arduino.h>
+
+/** Лог на UART0 (CH343) или USB CDC / UART классического ESP32. */
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && !ARDUINO_USB_CDC_ON_BOOT
+#define BEE_SERIAL Serial0
+#define BEE_SERIAL_BEGIN() BEE_SERIAL.begin(115200, SERIAL_8N1, 20, 21)
+#else
+#define BEE_SERIAL Serial
+#define BEE_SERIAL_BEGIN() BEE_SERIAL.begin(115200)
+#endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+// LuatOS CORE-ESP32-C3: D4=GPIO12, D5=GPIO13, active HIGH.
+constexpr int kBoardLedPins[] = {12, 13};
+#endif
+
+inline void beeplan_led_init() {
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+  for (int pin : kBoardLedPins) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+#endif
+}
+
+inline void beeplan_led_toggle() {
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+  for (int pin : kBoardLedPins) {
+    digitalWrite(pin, !digitalRead(pin));
+  }
+#endif
+}
+
+inline void beeplan_serial_begin() {
+  BEE_SERIAL_BEGIN();
+  delay(400);
+  BEE_SERIAL.println();
+  BEE_SERIAL.println();
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && ARDUINO_USB_CDC_ON_BOOT
+  BEE_SERIAL.println("BeePlan: USB CDC console");
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  BEE_SERIAL.println("BeePlan: UART0 GPIO20/21 (CH343 / CORE-ESP32-C3)");
+#else
+  BEE_SERIAL.println("BeePlan: serial console");
+#endif
+  BEE_SERIAL.flush();
+}

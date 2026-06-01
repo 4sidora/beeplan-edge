@@ -1,0 +1,22 @@
+#pragma once
+
+#include <esp_idf_version.h>
+#include <esp_now.h>
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define BEEPLAN_ESPNOW_V3 1
+#endif
+
+#if BEEPLAN_ESPNOW_V3
+
+inline bool beeplan_register_send_cb(void (*cb)(const wifi_tx_info_t*, esp_now_send_status_t)) {
+  return esp_now_register_send_cb(cb) == ESP_OK;
+}
+
+#else
+
+inline bool beeplan_register_send_cb(void (*cb)(const uint8_t*, esp_now_send_status_t)) {
+  return esp_now_register_send_cb(cb) == ESP_OK;
+}
+
+#endif

@@ -13,10 +13,18 @@ inline bool beeplan_register_send_cb(void (*cb)(const wifi_tx_info_t*, esp_now_s
   return esp_now_register_send_cb(cb) == ESP_OK;
 }
 
+inline bool beeplan_register_recv_cb(void (*cb)(const esp_now_recv_info_t*, const uint8_t*, int)) {
+  return esp_now_register_recv_cb(cb) == ESP_OK;
+}
+
 #else
 
 inline bool beeplan_register_send_cb(void (*cb)(const uint8_t*, esp_now_send_status_t)) {
   return esp_now_register_send_cb(cb) == ESP_OK;
+}
+
+inline bool beeplan_register_recv_cb(void (*cb)(const uint8_t*, const uint8_t*, int)) {
+  return esp_now_register_recv_cb(cb) == ESP_OK;
 }
 
 #endif

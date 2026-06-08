@@ -9,8 +9,14 @@ static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
 /** Интервал между циклами измерения (секунды). */
 #define WAKE_INTERVAL_SEC {{WAKE_INTERVAL_SEC}}
 
-/** Wi‑Fi канал концентратора (1–13). 0 = авто-поиск при старте. */
-#define GATEWAY_WIFI_CHANNEL 0
+/** Смещение TDMA-слота внутри часа (0–3599). */
+#define TELEMETRY_SLOT_SEC {{TELEMETRY_SLOT_SEC}}
+
+/** Wi‑Fi канал концентратора (1–13, обязателен в v2). */
+#define GATEWAY_WIFI_CHANNEL {{GATEWAY_WIFI_CHANNEL}}
+
+/** Тип устройства: 0=multisensor, 1=scales. */
+#define DEVICE_TYPE {{DEVICE_TYPE}}
 
 /** Semver (0.1.2). */
 #define FIRMWARE_VERSION "{{FIRMWARE_VERSION}}"

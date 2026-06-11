@@ -7,4 +7,4 @@ extern int16_t g_link_rssi_dbm;
 
 void beeplan_sensors_init();
 void beeplan_sensors_on_ack_rssi(int16_t rssi_dbm);
-void beeplan_sensors_read(int16_t& signal_dbm, float& battery_percent);
+void beeplan_sensors_read(int16_t& signal_dbm, float& battery_volts);

@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "config.h"
+
 /** Лог на UART0 (CH343) или USB CDC / UART классического ESP32. */
 #if defined(CONFIG_IDF_TARGET_ESP32C3) && !ARDUINO_USB_CDC_ON_BOOT
 #define BEE_SERIAL Serial0
@@ -9,6 +11,14 @@
 #else
 #define BEE_SERIAL Serial
 #define BEE_SERIAL_BEGIN() BEE_SERIAL.begin(115200)
+#endif
+
+#if BEEPLAN_DEBUG
+#define BEEPLAN_LOG(...) BEE_SERIAL.printf(__VA_ARGS__)
+#define BEEPLAN_LOGLN(msg) BEE_SERIAL.println(msg)
+#else
+#define BEEPLAN_LOG(...) ((void)0)
+#define BEEPLAN_LOGLN(msg) ((void)0)
 #endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -34,6 +44,7 @@ inline void beeplan_led_toggle() {
 }
 
 inline void beeplan_serial_begin() {
+#if BEEPLAN_DEBUG
   BEE_SERIAL_BEGIN();
   delay(400);
   BEE_SERIAL.println();
@@ -46,4 +57,5 @@ inline void beeplan_serial_begin() {
   BEE_SERIAL.println("BeePlan: serial console");
 #endif
   BEE_SERIAL.flush();
+#endif
 }

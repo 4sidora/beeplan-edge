@@ -8,6 +8,7 @@
 #include <esp_random.h>
 #include <esp_sleep.h>
 #include <esp_wifi.h>
+#include <sys/time.h>
 #include <time.h>
 #include <WiFi.h>
 
@@ -33,8 +34,61 @@ uint8_t g_tx_seq = 0;
 
 /** Счётчик успешных отправок — сохраняется между deep sleep. */
 RTC_DATA_ATTR uint32_t g_send_iteration = 0;
+/** Интервал замера из ACK gateway; 0 — использовать WAKE_INTERVAL_SEC из прошивки. */
+RTC_DATA_ATTR uint32_t g_runtime_wake_interval_sec = 0;
+/** Последний WAKE_INTERVAL_SEC из прошивки (для сброса runtime после перепрошивки). */
+RTC_DATA_ATTR uint32_t g_rtc_compiled_wake_sec = 0;
+/** Unix-время последней отправки метрики firmware_version. */
+RTC_DATA_ATTR uint32_t g_last_firmware_report_ts = 0;
 
 Preferences g_prefs;
+
+constexpr uint32_t kFirmwareReportMinIntervalSec = 86400U;
+
+void reconcile_runtime_wake_interval() {
+  const uint32_t compiled = static_cast<uint32_t>(WAKE_INTERVAL_SEC);
+  if (g_rtc_compiled_wake_sec != compiled) {
+    g_runtime_wake_interval_sec = 0;
+    g_rtc_compiled_wake_sec = compiled;
+    BEEPLAN_LOG("wake_interval reset (compiled=%u s)\n", static_cast<unsigned>(compiled));
+  }
+}
+
+uint32_t effective_wake_interval_sec() {
+  if (g_runtime_wake_interval_sec >= 10U && g_runtime_wake_interval_sec <= 86400U) {
+    return g_runtime_wake_interval_sec;
+  }
+  return static_cast<uint32_t>(WAKE_INTERVAL_SEC);
+}
+
+void apply_wake_interval_from_ack(uint16_t wake_sec) {
+  if (wake_sec < 10U || wake_sec > 86400U) {
+    return;
+  }
+  if (g_runtime_wake_interval_sec != static_cast<uint32_t>(wake_sec)) {
+    g_runtime_wake_interval_sec = wake_sec;
+    BEEPLAN_LOG("wake_interval set to %u s from gateway\n", static_cast<unsigned>(wake_sec));
+  }
+}
+
+bool wall_clock_valid() {
+  return time(nullptr) > static_cast<time_t>(kMinValidUnixTs);
+}
+
+bool should_include_firmware_metric() {
+  const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  if (cause == ESP_SLEEP_WAKEUP_UNDEFINED) {
+    return true;
+  }
+  if (g_last_firmware_report_ts == 0) {
+    return true;
+  }
+  if (!wall_clock_valid()) {
+    return false;
+  }
+  return time(nullptr) - static_cast<time_t>(g_last_firmware_report_ts) >=
+         static_cast<time_t>(kFirmwareReportMinIntervalSec);
+}
 
 uint32_t load_report_seq() {
   g_prefs.begin(kPrefsNamespace, true);
@@ -49,8 +103,15 @@ void save_report_seq(uint32_t seq) {
   g_prefs.end();
 }
 
-bool wall_clock_valid() {
-  return time(nullptr) > static_cast<time_t>(kMinValidUnixTs);
+void apply_gateway_time(uint32_t gateway_unix_ts) {
+  if (gateway_unix_ts < kMinValidUnixTs) {
+    return;
+  }
+  const struct timeval tv = {
+      .tv_sec = static_cast<time_t>(gateway_unix_ts),
+      .tv_usec = 0,
+  };
+  settimeofday(&tv, nullptr);
 }
 
 void pack_firmware_version(uint16_t& major_minor, uint16_t& patch) {
@@ -78,16 +139,25 @@ void on_sent_v3(const wifi_tx_info_t* info, esp_now_send_status_t status) {
 
 void on_recv_legacy(const uint8_t* mac, const uint8_t* data, int len) {
   (void)mac;
-  if (len != static_cast<int>(sizeof(AckFrameV2))) {
+  if (len < static_cast<int>(kAckFrameV2LegacyLen)) {
     return;
   }
   AckFrameV2 ack{};
-  memcpy(&ack, data, sizeof(ack));
-  if (ack.magic != kBeeplanMagicAck || ack.proto_version != kBeeplanProtoV2) {
+  memset(&ack, 0, sizeof(ack));
+  memcpy(&ack, data, static_cast<size_t>(len < static_cast<int>(sizeof(ack)) ? len : sizeof(ack)));
+  if (ack.magic != kBeeplanMagicAck) {
+    return;
+  }
+  if (ack.proto_version != kBeeplanProtoV2 && ack.proto_version != kBeeplanProtoAckV3) {
     return;
   }
   if (strncmp(ack.device_id, DEVICE_PUBLIC_ID, sizeof(ack.device_id)) != 0) {
     return;
+  }
+  apply_gateway_time(ack.gateway_unix_ts);
+  if (ack.proto_version >= kBeeplanProtoAckV3 &&
+      len >= static_cast<int>(sizeof(AckFrameV2))) {
+    apply_wake_interval_from_ack(ack.wake_interval_sec);
   }
   if (ack.ack_seq == g_tx_seq) {
     g_ack_received = true;
@@ -183,28 +253,39 @@ uint32_t current_epoch() {
 }
 
 uint32_t seconds_until_next_slot() {
+  const uint32_t wake_sec = effective_wake_interval_sec();
+  if (wake_sec < kTdmaMinWakeIntervalSec) {
+    return wake_sec;
+  }
   const uint32_t epoch = current_epoch();
-  const uint32_t hour_start = epoch - (epoch % WAKE_INTERVAL_SEC);
-  uint32_t slot_ts = hour_start + static_cast<uint32_t>(TELEMETRY_SLOT_SEC);
+  const uint32_t cycle_start = epoch - (epoch % wake_sec);
+  uint32_t slot_ts = cycle_start + static_cast<uint32_t>(TELEMETRY_SLOT_SEC);
   if (slot_ts <= epoch) {
-    slot_ts += WAKE_INTERVAL_SEC;
+    slot_ts += wake_sec;
   }
   return slot_ts - epoch;
 }
 
 void sleep_until_next_slot() {
+  const uint32_t wake_sec = effective_wake_interval_sec();
   const uint32_t delay_sec = seconds_until_next_slot();
-  BEE_SERIAL.printf("deep sleep %us until slot %u\n", delay_sec,
-                    static_cast<unsigned>(TELEMETRY_SLOT_SEC));
+  if (wake_sec < kTdmaMinWakeIntervalSec) {
+    BEEPLAN_LOG("deep sleep %us (wake %us, TDMA off)\n", delay_sec, static_cast<unsigned>(wake_sec));
+  } else {
+    BEEPLAN_LOG("deep sleep %us until slot %u\n", delay_sec,
+                static_cast<unsigned>(TELEMETRY_SLOT_SEC));
+  }
+#if BEEPLAN_DEBUG
   BEE_SERIAL.flush();
+#endif
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(delay_sec) * 1000000ULL);
   esp_deep_sleep_start();
 }
 
 ReportFrameV2 build_report(uint32_t iteration, uint32_t report_seq) {
   int16_t signal_dbm = -127;
-  float battery_pct = 0.0f;
-  beeplan_sensors_read(signal_dbm, battery_pct);
+  float battery_volts = 0.0f;
+  beeplan_sensors_read(signal_dbm, battery_volts);
 
   ReportFrameV2 msg{};
   msg.magic = kBeeplanMagicV2;
@@ -213,7 +294,11 @@ ReportFrameV2 build_report(uint32_t iteration, uint32_t report_seq) {
   msg.seq = static_cast<uint8_t>(report_seq & 0xFFU);
   g_tx_seq = msg.seq;
   msg.device_type = static_cast<uint8_t>(DEVICE_TYPE);
-  msg.metrics_present = kMetricTemp | kMetricRh | kMetricSignal | kMetricBattery | kMetricFirmware;
+  uint8_t metrics = kMetricTemp | kMetricRh | kMetricSignal | kMetricBattery;
+  if (should_include_firmware_metric()) {
+    metrics |= kMetricFirmware;
+  }
+  msg.metrics_present = metrics;
   memset(msg.device_id, 0, sizeof(msg.device_id));
   strncpy(msg.device_id, DEVICE_PUBLIC_ID, sizeof(msg.device_id) - 1);
   if (wall_clock_valid()) {
@@ -226,12 +311,14 @@ ReportFrameV2 build_report(uint32_t iteration, uint32_t report_seq) {
   msg.temp_c_x100 = static_cast<int16_t>(iteration * 100);
   msg.rh_x100 = static_cast<int16_t>(iteration * 100);
   msg.signal_dbm = signal_dbm;
-  msg.battery_x100 = static_cast<int16_t>(battery_pct * 100.0f);
-  uint16_t fw_major_minor = 0;
-  uint16_t fw_patch = 0;
-  pack_firmware_version(fw_major_minor, fw_patch);
-  msg.fw_major_minor = fw_major_minor;
-  msg.fw_patch = fw_patch;
+  msg.battery_x100 = static_cast<int16_t>(battery_volts * 100.0f);
+  if ((metrics & kMetricFirmware) != 0) {
+    uint16_t fw_major_minor = 0;
+    uint16_t fw_patch = 0;
+    pack_firmware_version(fw_major_minor, fw_patch);
+    msg.fw_major_minor = fw_major_minor;
+    msg.fw_patch = fw_patch;
+  }
   msg.audio_rms_x1000 = 0;
   msg.audio_peak_hz = 0;
   return msg;
@@ -245,18 +332,40 @@ void transmit_with_retry() {
     if (send_report(msg)) {
       g_send_iteration = next_iteration;
       save_report_seq(report_seq);
-      BEE_SERIAL.printf(
-          "ReportFrameV2 sent seq=%u iter=%lu report=%lu bat=%.0f%% rssi=%d ack ok\n",
+      if ((msg.metrics_present & kMetricFirmware) != 0) {
+        if (wall_clock_valid()) {
+          g_last_firmware_report_ts = static_cast<uint32_t>(time(nullptr));
+        } else {
+          g_last_firmware_report_ts = 1;
+        }
+      }
+      BEEPLAN_LOG(
+          "ReportFrameV2 sent seq=%u iter=%lu report=%lu bat=%.2fV rssi=%d wake=%u ack ok\n",
           static_cast<unsigned>(msg.seq), static_cast<unsigned long>(g_send_iteration),
           static_cast<unsigned long>(report_seq), msg.battery_x100 / 100.0f,
-          static_cast<int>(g_link_rssi_dbm));
+          static_cast<int>(g_link_rssi_dbm), static_cast<unsigned>(effective_wake_interval_sec()));
       return;
     }
-    BEE_SERIAL.printf("ReportFrameV2 retry %d seq=%u\n", attempt + 1, static_cast<unsigned>(msg.seq));
+    BEEPLAN_LOG("ReportFrameV2 retry %d seq=%u\n", attempt + 1, static_cast<unsigned>(msg.seq));
     delay(50 + attempt * 50);
   }
   beeplan_led_toggle();
-  BEE_SERIAL.println("ReportFrameV2 failed after retries");
+  BEEPLAN_LOGLN("ReportFrameV2 failed after retries");
+}
+
+/** GPIO0 (BOOT/PRG): удержание при старте — режим USB-прошивки без deep sleep. */
+bool boot_button_held() {
+  pinMode(0, INPUT_PULLUP);
+  delay(20);
+  return digitalRead(0) == LOW;
+}
+
+void install_mode_loop() {
+  BEE_SERIAL.println("INSTALL mode (BOOT held) — deep sleep disabled, ready for USB flash");
+  while (true) {
+    delay(5000);
+    BEE_SERIAL.println("INSTALL mode: waiting for WebSerial...");
+  }
 }
 
 }  // namespace
@@ -265,18 +374,22 @@ void setup() {
   beeplan_led_init();
   beeplan_sensors_init();
   beeplan_serial_begin();
-  BEE_SERIAL.printf("BeePlan edge %s\n", FIRMWARE_SERIAL_TAG);
-  BEE_SERIAL.printf("sizeof(ReportFrameV2)=%u slot=%u channel=%u\n",
-                    static_cast<unsigned>(sizeof(ReportFrameV2)),
-                    static_cast<unsigned>(TELEMETRY_SLOT_SEC),
-                    static_cast<unsigned>(GATEWAY_WIFI_CHANNEL));
-  BEE_SERIAL.printf("report_seq nvs=%lu clock=%s\n",
-                    static_cast<unsigned long>(load_report_seq()),
-                    wall_clock_valid() ? "ntp" : "none");
+  reconcile_runtime_wake_interval();
+  if (boot_button_held()) {
+    install_mode_loop();
+  }
+  BEEPLAN_LOG("BeePlan edge %s\n", FIRMWARE_SERIAL_TAG);
+  BEEPLAN_LOG("sizeof(ReportFrameV2)=%u slot=%u channel=%u wake=%u\n",
+              static_cast<unsigned>(sizeof(ReportFrameV2)),
+              static_cast<unsigned>(TELEMETRY_SLOT_SEC),
+              static_cast<unsigned>(GATEWAY_WIFI_CHANNEL),
+              static_cast<unsigned>(effective_wake_interval_sec()));
+  BEEPLAN_LOG("report_seq nvs=%lu clock=%s\n", static_cast<unsigned long>(load_report_seq()),
+              wall_clock_valid() ? "ntp" : "none");
   randomSeed(esp_random());
 
   if (!espnow_init()) {
-    BEE_SERIAL.println("FATAL: esp_now init failed");
+    BEEPLAN_LOGLN("FATAL: esp_now init failed");
     while (true) {
       beeplan_led_toggle();
       delay(150);

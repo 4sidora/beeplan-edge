@@ -23,3 +23,6 @@ static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
 
 /** Полное имя в Serial: beeplan-Edge-0.1.2 */
 #define FIRMWARE_SERIAL_TAG "{{FIRMWARE_SERIAL_TAG}}"
+
+/** 1 — подробный UART-лог; 0 — без задержки serial при boot. */
+#define BEEPLAN_DEBUG {{BEEPLAN_DEBUG}}

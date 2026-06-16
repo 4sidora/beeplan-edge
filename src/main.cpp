@@ -227,6 +227,10 @@ bool espnow_init() {
   WiFi.setSleep(false);
   delay(100);
 
+  if (!beeplan_espnow_enable_lr()) {
+    BEEPLAN_LOGLN("WARN: ESP-NOW LR mode not enabled");
+  }
+
   const uint8_t channel = static_cast<uint8_t>(GATEWAY_WIFI_CHANNEL);
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 

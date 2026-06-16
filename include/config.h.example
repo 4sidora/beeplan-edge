@@ -1,9 +1,12 @@
 #pragma once
 
-static const uint8_t GATEWAY_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-#define DEVICE_PUBLIC_ID "dev-edge-1"
-#define WAKE_INTERVAL_SEC 60
-#define GATEWAY_WIFI_CHANNEL 0
+/** Заглушка для локальной сборки / warmup toolchain (не для прошивки в поле). */
+static const uint8_t GATEWAY_MAC[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+#define DEVICE_PUBLIC_ID "dev-edge-warmup"
+#define WAKE_INTERVAL_SEC 3600
+#define TELEMETRY_SLOT_SEC 0
+#define GATEWAY_WIFI_CHANNEL 6
+#define DEVICE_TYPE 0
 #define FIRMWARE_VERSION "0.0.0-dev"
 #define FIRMWARE_SERIAL_TAG "beeplan-Edge-0.0.0-dev"
 #define BEEPLAN_DEBUG 1

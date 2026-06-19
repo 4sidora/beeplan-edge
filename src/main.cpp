@@ -1,5 +1,5 @@
 /**
- * BeePlan edge — ESP-NOW v2, deep sleep, TDMA slot.
+ * BeePlan edge — ESP-NOW v2, deep sleep.
  */
 #include <Arduino.h>
 #include <Preferences.h>
@@ -249,36 +249,9 @@ bool espnow_init() {
   return ensure_peer_on_channel(channel);
 }
 
-uint32_t current_epoch() {
-  if (wall_clock_valid()) {
-    return static_cast<uint32_t>(time(nullptr));
-  }
-  return static_cast<uint32_t>(millis() / 1000);
-}
-
-uint32_t seconds_until_next_slot() {
-  const uint32_t wake_sec = effective_wake_interval_sec();
-  if (wake_sec < kTdmaMinWakeIntervalSec) {
-    return wake_sec;
-  }
-  const uint32_t epoch = current_epoch();
-  const uint32_t cycle_start = epoch - (epoch % wake_sec);
-  uint32_t slot_ts = cycle_start + static_cast<uint32_t>(TELEMETRY_SLOT_SEC);
-  if (slot_ts <= epoch) {
-    slot_ts += wake_sec;
-  }
-  return slot_ts - epoch;
-}
-
-void sleep_until_next_slot() {
-  const uint32_t wake_sec = effective_wake_interval_sec();
-  const uint32_t delay_sec = seconds_until_next_slot();
-  if (wake_sec < kTdmaMinWakeIntervalSec) {
-    BEEPLAN_LOG("deep sleep %us (wake %us, TDMA off)\n", delay_sec, static_cast<unsigned>(wake_sec));
-  } else {
-    BEEPLAN_LOG("deep sleep %us until slot %u\n", delay_sec,
-                static_cast<unsigned>(TELEMETRY_SLOT_SEC));
-  }
+void sleep_until_next_wake() {
+  const uint32_t delay_sec = effective_wake_interval_sec();
+  BEEPLAN_LOG("deep sleep %us (wake interval)\n", delay_sec);
 #if BEEPLAN_DEBUG
   BEE_SERIAL.flush();
 #endif
@@ -383,9 +356,8 @@ void setup() {
     install_mode_loop();
   }
   BEEPLAN_LOG("BeePlan edge %s\n", FIRMWARE_SERIAL_TAG);
-  BEEPLAN_LOG("sizeof(ReportFrameV2)=%u slot=%u channel=%u wake=%u\n",
+  BEEPLAN_LOG("sizeof(ReportFrameV2)=%u channel=%u wake=%u\n",
               static_cast<unsigned>(sizeof(ReportFrameV2)),
-              static_cast<unsigned>(TELEMETRY_SLOT_SEC),
               static_cast<unsigned>(GATEWAY_WIFI_CHANNEL),
               static_cast<unsigned>(effective_wake_interval_sec()));
   BEEPLAN_LOG("report_seq nvs=%lu clock=%s\n", static_cast<unsigned long>(load_report_seq()),
@@ -401,7 +373,7 @@ void setup() {
   }
 
   transmit_with_retry();
-  sleep_until_next_slot();
+  sleep_until_next_wake();
 }
 
 void loop() {

@@ -4,7 +4,6 @@
 static const uint8_t GATEWAY_MAC[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
 #define DEVICE_PUBLIC_ID "dev-edge-warmup"
 #define WAKE_INTERVAL_SEC 3600
-#define TELEMETRY_SLOT_SEC 0
 #define GATEWAY_WIFI_CHANNEL 6
 #define DEVICE_TYPE 0
 #define FIRMWARE_VERSION "0.0.0-dev"

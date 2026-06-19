@@ -9,9 +9,6 @@ static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
 /** Интервал между циклами измерения (секунды). */
 #define WAKE_INTERVAL_SEC {{WAKE_INTERVAL_SEC}}
 
-/** Смещение TDMA-слота внутри часа (0–3599). */
-#define TELEMETRY_SLOT_SEC {{TELEMETRY_SLOT_SEC}}
-
 /** Wi‑Fi канал концентратора (1–13, обязателен в v2). */
 #define GATEWAY_WIFI_CHANNEL {{GATEWAY_WIFI_CHANNEL}}
 

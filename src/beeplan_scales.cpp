@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <time.h>
 
 #include "beeplan_io.h"
 #include "beeplan_sensors.h"

@@ -15,6 +15,16 @@ static const uint8_t GATEWAY_MAC[6] = { {{GATEWAY_MAC_BYTES}} };
 /** Тип устройства: 0=multisensor, 1=scales. */
 #define DEVICE_TYPE {{DEVICE_TYPE}}
 
+/** HX711 (TZT module): DOUT и SCK. Для multisensor — 0 (не используется). */
+#define HX711_DOUT_PIN {{HX711_DOUT_PIN}}
+#define HX711_SCK_PIN {{HX711_SCK_PIN}}
+
+/** DS18B20 для компенсации температурного дрейфа тензодатчика. */
+#define DS18B20_PIN {{DS18B20_PIN}}
+
+/** 1 — взвешивание половины массы (×2 в отчёте); 0 — полный вес. */
+#define WEIGHT_MODE_HALF {{WEIGHT_MODE_HALF}}
+
 /** Semver (0.1.2). */
 #define FIRMWARE_VERSION "{{FIRMWARE_VERSION}}"
 

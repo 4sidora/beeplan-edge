@@ -15,6 +15,7 @@
 #include "beeplan_io.h"
 #include "beeplan_espnow.h"
 #include "beeplan_sensors.h"
+#include "beeplan_scales.h"
 #include "config.h"
 #include "envelope_v2.h"
 
@@ -250,6 +251,7 @@ bool espnow_init() {
 }
 
 void sleep_until_next_wake() {
+  beeplan_scales_power_down();
   const uint32_t delay_sec = effective_wake_interval_sec();
   BEEPLAN_LOG("deep sleep %us (wake interval)\n", delay_sec);
 #if BEEPLAN_DEBUG
@@ -304,7 +306,11 @@ ReportFrameV2 build_report(uint32_t iteration, uint32_t report_seq) {
 void transmit_with_retry() {
   const uint32_t next_iteration = g_send_iteration + 1;
   const uint32_t report_seq = load_report_seq() + 1;
+#if DEVICE_TYPE == 1
+  ReportFrameV2 msg = beeplan_scales_build_report(report_seq, should_include_firmware_metric());
+#else
   ReportFrameV2 msg = build_report(next_iteration, report_seq);
+#endif
   for (int attempt = 0; attempt < 3; ++attempt) {
     if (send_report(msg)) {
       g_send_iteration = next_iteration;
@@ -318,7 +324,7 @@ void transmit_with_retry() {
       }
       BEEPLAN_LOG(
           "ReportFrameV2 sent seq=%u iter=%lu report=%lu bat=%.2fV rssi=%d wake=%u ack ok\n",
-          static_cast<unsigned>(msg.seq), static_cast<unsigned long>(g_send_iteration),
+          static_cast<unsigned>(msg.seq), static_cast<unsigned long>(g_send_iteration + 1),
           static_cast<unsigned long>(report_seq), msg.battery_x100 / 100.0f,
           static_cast<int>(g_link_rssi_dbm), static_cast<unsigned>(effective_wake_interval_sec()));
       return;
@@ -350,6 +356,7 @@ void install_mode_loop() {
 void setup() {
   beeplan_led_init();
   beeplan_sensors_init();
+  beeplan_scales_init();
   beeplan_serial_begin();
   reconcile_runtime_wake_interval();
   if (boot_button_held()) {
